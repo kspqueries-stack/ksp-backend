@@ -1,0 +1,85 @@
+# =============================================================================
+# KSP Workboard - Systemd Service File for AWS EC2
+# =============================================================================
+# LOCATION ON EC2: /etc/systemd/system/ksp-backend.service
+#
+# HOW TO INSTALL:
+#   1. SSH into your EC2: ssh -i ksp-key.pem ec2-user@<EC2-PUBLIC-IP>
+#   2. Copy this file: sudo cp ksp-backend.service /etc/systemd/system/
+#   3. Reload systemd: sudo systemctl daemon-reload
+#   4. Enable on boot: sudo systemctl enable ksp-backend
+#   5. Start service: sudo systemctl start ksp-backend
+#   6. Check status: sudo systemctl status ksp-backend
+#   7. View logs: sudo journalctl -u ksp-backend -f
+# =============================================================================
+
+[Unit]
+Description=KSP Workboard Spring Boot Backend
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/ksp
+
+# --- Java Command ---
+ExecStart=/usr/bin/java -Xms256m -Xmx512m -jar /opt/ksp/ksp-workboard.jar --spring.profiles.active=prod
+
+# --- Restart Policy ---
+Restart=always
+RestartSec=10
+SuccessExitStatus=143
+
+# --- Environment Variables ---
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║ REPLACE ALL <PLACEHOLDER> VALUES BELOW WITH YOUR ACTUAL AWS VALUES       ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
+# DATABASE CONNECTION
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ WHERE TO GET DB_URL:                                                      │
+# │ AWS Console → RDS → Databases → click "ksp-postgres"                     │
+# │ → "Connectivity & security" tab → copy "Endpoint"                        │
+# │ Example: ksp-postgres.cxxxxxxxx.us-east-1.rds.amazonaws.com              │
+# └─────────────────────────────────────────────────────────────────────────┘
+Environment=DB_URL=jdbc:postgresql://ksp-postgres.c27mq2wamxfw.us-east-1.rds.amazonaws.com:5432/ksp_workboard
+Environment=DB_USERNAME=ksp_admin
+Environment=DB_PASSWORD=ksp_admin_123
+
+# JWT SECRET
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ Generate with: openssl rand -base64 48                                    │
+# └─────────────────────────────────────────────────────────────────────────┘
+Environment=JWT_SECRET=YmZH9EZRyYb101lWIbgcSuvYs41FPTcYnnf6Fkd2Wa1bd0i3RJzxvyl7ObyoMiBH
+
+# AI PROVIDER CONFIGURATION
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ Using AWS Bedrock (Amazon Nova Lite) — cheapest model for your needs.    │
+# │ No API key needed — the EC2 IAM role handles authentication.            │
+# │ Cost: ~$0.06/M input tokens, $0.24/M output tokens                     │
+# │                                                                          │
+# │ Fallback: Set AI_PROVIDER=groq and provide GROQ_API_KEY to use Groq.    │
+# └─────────────────────────────────────────────────────────────────────────┘
+Environment=AI_PROVIDER=bedrock
+Environment=AWS_REGION=us-east-1
+Environment=BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
+Environment=GROQ_API_KEY=
+Environment=GROQ_API_URL=https://api.groq.com/openai/v1
+
+# CORS - FRONTEND URL
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ After setting up CloudFront:                                              │
+# │ AWS Console → CloudFront → Distributions → copy "Domain name"           │
+# │ Format: https://d1234abcdef.cloudfront.net                               │
+# └─────────────────────────────────────────────────────────────────────────┘
+Environment=CORS_ALLOWED_ORIGINS=https://dtszoaal8ujla.cloudfront.net
+
+# --- Logging ---
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ksp-backend
+
+[Install]
+WantedBy=multi-user.target
